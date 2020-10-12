@@ -187,7 +187,6 @@ for dataset in config.dataset_Names:
 
 		# for each row
 		for row in rows:
-			print(row)
 			# read image
 			image_ = cv2.imread(row)
 			# obtain bounding box
@@ -240,5 +239,5 @@ output_sex.close()
 output_emo.close()
 
 # start time
-elapsedTime = (datetime.now() - startTime).seconds
+elapsedTime = (datetime.now() - start).seconds
 print("Total run time {} seconds...".format(elapsedTime))
