@@ -5,13 +5,14 @@ matplotlib.use("Agg")
 # Used fine tuning to train a model that predicts the bounding box
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from helpers.callbacks.learningratefinder import LearningRateFinder
-from train_set import compile_pretrained, compile_trained
 from tensorflow.keras.callbacks import ModelCheckpoint
 from helpers.callbacks.clr_callback import CyclicLR
 from helpers.meanpre import MeanPreprocessor
 from tensorflow.keras.optimizers import SGD
 from helpers.io import HDF5DatasetGenerator
 from helpers.plots import TrainingMonitor
+from train_set import compile_trained
+import matplotlib.pyplot as plt
 from config import PathConfig
 from builders import Build
 import numpy as np
@@ -31,6 +32,8 @@ ap.add_argument("-f", "--lr-find", type=int, default=0,
 	help="whether or not to find optimal learning rate")
 ap.add_argument("-ss", "--startPoint", type=int, default=0,
 	help="where to continue training from")
+ap.add_argument("-mv", "--model-verbose", type=int, default=0,
+	help="where to continue training from")
 args = vars(ap.parse_args())
 
 # initialize dataset configuration
@@ -41,36 +44,30 @@ if args["answer"].upper() == "N" or args["answer"].upper() == "No":
 	# grab database of processed images
 	print("[INFO] Building sets for {} data...".format(args["dataset"]))
 	
-	# initialize the database
+	# initialize the database and build the database
 	create_ = Build(config)
-	
-	# build database
-	if args["dataset"].lower() == "face":
-		create_.face_build()
-	else:
-		create_.build()
+	create_.build(args["dataset"])
 
 # initialize the database mean
 means = json.loads(open(config.color_mean).read())
 mp = MeanPreprocessor(means["R"], means["G"], means["B"])
 
-# image augmentation 
-aug = ImageDataGenerator(horizontal_flip=True, fill_mode="nearest")
+# initialize class weights mean
+weights = json.loads(open(config.weights).read())
+weights = np.array(weights["Weights"])
 
-# construct the image generator for data augmentation
-if args["dataset"].lower() == "face":
+# data augmentation
+aug = ImageDataGenerator(rescale=1 / 255.0, zoom_range=0.1, rotation_range=10,
+ horizontal_flip=True, fill_mode="nearest")
+valAug = ImageDataGenerator(rescale=1 / 255.0)
 
-	# initialize the training and validation dataset gens
-	(model, trainGen, valGen) = compile_trained(config, mp, aug=aug)	
+# initialize the training and validation dataset gens
+(model, trainGen, valGen) = compile_trained(config, mp, args["dataset"], aug=aug,
+ valAug=valAug)
 
-# for other datasets	
-else:
-	
-	# initialize the training and validation dataset gens
-	trainGen = HDF5DatasetGenerator(config.train_hdf5, config.batch_size,
-		  aug=aug)
-	valGen = HDF5DatasetGenerator(config.val_hdf5, config.batch_size)
- 
+# print model summary if wanted
+if args["model_verbose"]:
+	print(model.summary())
 
 # check to see if we are attempting to find an optimal learning rate
 if args["lr_find"] > 0:
@@ -112,21 +109,21 @@ bname = os.path.sep.join([config.output_Path,
 	"weights.hdf5"])
 
 # create call backs
-checkpoint = ModelCheckpoint(fname, monitor="val_loss", mode="min",
+checkpoint = ModelCheckpoint(bname, monitor="val_loss", mode="min",
 	save_best_only=True, verbose=1)
 callbacks = [clr, checkpoint, TrainingMonitor(figPath, jsonPath, args["startPoint"])]
 
-# train the network for bounding box regression
-print("[INFO] Training bounding box regrssor...")
+# Train network
+print("[INFO] Training...")
 H = model.fit(
 	trainGen.generator(),
 	steps_per_epoch=trainGen.numImages // config.batch_size,
-	validation_data=trainGen.generator(),
+	validation_data=valGen.generator(),
 	validation_steps=valGen.numImages // config.batch_size,
 	epochs=config.num_epochs,
 	callbacks=callbacks,
+	class_weight=weights,
 	verbose=1)
-
 
 # plot the learning rate history
 N = np.arange(0, len(clr.history["lr"]))
