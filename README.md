@@ -1,5 +1,5 @@
 # Human-Predictor
-* This a personal project based on the ironman movie. The idea is to get it to function optimally on an embedded system eventually. Upon completion, it should be able to identify
+* This a personal project based on the ironman movie. The idea is to get it to function optimally on an embedded system eventually. Upon completion, it should be able to identify:
 	* Race
 	* Sex
 	* Age Bracket
